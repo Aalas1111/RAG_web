@@ -67,7 +67,17 @@
         </div>
 
         <!-- 回答区 -->
-        <div v-if="answer !== null" class="w-full mt-6 rounded-2xl bg-dark-800 border border-violet-800/50 p-5 animate-fade-in">
+        <div v-if="loadingQuery" class="w-full mt-6 rounded-2xl bg-dark-800 border border-violet-800/50 p-5 flex items-center justify-center">
+          <div class="text-violet-400">
+            <div class="flex items-center justify-center gap-2">
+              <svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>答案生成中...</span>
+            </div>
+          </div>
+        </div>
+        <div v-else-if="answer !== null" class="w-full mt-6 rounded-2xl bg-dark-800 border border-violet-800/50 p-5 animate-fade-in">
           <div class="markdown-body max-w-none" v-html="answerHtml"></div>
           <p v-if="usage" class="mt-4 text-violet-500 text-sm">今日已用 {{ usage.today_used }} / {{ usage.daily_limit }} 次</p>
         </div>
