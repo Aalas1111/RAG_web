@@ -11,7 +11,6 @@
   - 删除图谱、修改图谱名称或简介
   - 查看今日各图谱 query 次数，并修改各图谱每日 query 限额
   - 配置环境变量（修改 .env，敏感项不展示原值）
-  - 重启网站（需在 .env 中配置 RESTART_SCRIPT）
 
 不同数据图谱单独存放，互不干扰。
 
@@ -35,7 +34,6 @@ RAG_web/
 │   │   └── api.js
 │   ├── package.json
 │   └── vite.config.js
-├── scripts/          # 示例脚本（如 restart.sh）
 ├── data/             # 运行时生成：图谱数据与 SQLite
 ├── .env              # 配置与 API Key（勿提交到 Git）
 ├── .env.example
@@ -170,13 +168,6 @@ npm run dev
 ### 6. 数据与权限
 
 运行后会在项目根目录下生成 `data/`（SQLite 与各图谱数据），请保证运行用户对该目录有写权限，例如：`chown -R www:www /www/wwwroot/rag_web/data`。
-
-### 7. 管理界面「重启网站」
-
-- 管理员在管理界面顶栏可点击「重启网站」，触发服务器上的重启脚本。
-- 需在 .env 或「配置环境变量」中设置 `RESTART_SCRIPT`，例如：`RESTART_SCRIPT=scripts/restart.sh`。
-- 脚本路径为相对项目根目录，且必须在项目根目录下。项目内提供示例 `scripts/restart.sh`（按 Supervisor 程序名 `rag_web_api` 重启后端，并可选重载 Nginx）。
-- 若使用宝塔或其它方式，请复制并修改 `scripts/restart.sh` 中的命令。未配置 `RESTART_SCRIPT` 时，点击「重启网站」会提示未配置重启脚本。
 
 ---
 

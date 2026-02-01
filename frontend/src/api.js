@@ -57,7 +57,3 @@ export const adminGetEnv = () =>
 
 export const adminPatchEnv = (env) =>
   api.patch('/admin/env', { env }, { headers: authHeaders() }).then(r => r.data)
-
-/** 重启网站（执行服务器上配置的 RESTART_SCRIPT） */
-export const adminRestart = () =>
-  api.post('/admin/restart', {}, { headers: authHeaders() }).then(r => r.data)

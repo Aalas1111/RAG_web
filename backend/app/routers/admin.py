@@ -1,13 +1,12 @@
-"""管理员 API：登录、图谱 CRUD、统计、限额、环境变量、重启"""
+"""管理员 API：登录、图谱 CRUD、统计、限额、环境变量"""
 import shutil
 import re
-import subprocess
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 
-from app.config import GRAPHS_DIR, PROJECT_ROOT, ensure_dirs, get_settings
+from app.config import GRAPHS_DIR, PROJECT_ROOT, ensure_dirs
 from app.database import (
     graph_list,
     graph_get,
@@ -202,7 +201,6 @@ ENV_KEYS_ALLOWED = [
     "SILICONCLOUD_API_KEY", "SILICONCLOUD_EMBEDDING_MODEL", "SILICONCLOUD_RERANK_MODEL",
     "ADMIN_USERNAME", "ADMIN_PASSWORD", "SECRET_KEY",
     "DATABASE_URL",
-    "RESTART_SCRIPT",
 ]
 # 敏感键：接口不返回真实值，只显示“已设置”占位
 ENV_KEYS_SENSITIVE = {
@@ -303,35 +301,4 @@ def patch_env(body: EnvUpdateRequest, admin: str = Depends(get_current_admin)):
     if not updates:
         return {"message": "无有效更新"}
     _write_env_file(updates)
-    return {"message": "已更新"}"
-
-
-# --- 重启网站（执行 .env 中配置的 RESTART_SCRIPT）---
-@router.post("/restart")
-def restart_website(admin: str = Depends(get_current_admin)):
-    """执行 RESTART_SCRIPT 脚本以重启前后端服务；未配置时返回 400。"""
-    script = (get_settings().restart_script or "").strip()
-    if not script:
-        raise HTTPException(
-            status_code=400,
-            detail="未配置重启脚本。请在 .env 或「配置环境变量」中设置 RESTART_SCRIPT（如 scripts/restart.sh）",
-        )
-    path = Path(script)
-    if not path.is_absolute():
-        path = PROJECT_ROOT / path
-    path = path.resolve()
-    if not path.exists():
-        raise HTTPException(status_code=400, detail=f"重启脚本不存在: {path}")
-    try:
-        path_relative = path.relative_to(PROJECT_ROOT)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="重启脚本必须在项目根目录下")
-    subprocess.Popen(
-        [str(path)],
-        cwd=str(PROJECT_ROOT),
-        shell=True,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    return {"message": "重启已触发，请稍候"}
+    return {"message": "已更新"}

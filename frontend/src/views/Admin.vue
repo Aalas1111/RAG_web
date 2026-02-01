@@ -4,14 +4,6 @@
     <header class="flex items-center justify-between px-6 py-4 border-b border-dark-700 shrink-0">
       <h1 class="text-lg font-semibold text-violet-200">管理界面</h1>
       <div class="flex items-center gap-3">
-        <button
-          type="button"
-          class="px-4 py-2 rounded-lg bg-dark-800 border border-violet-800/50 text-violet-300 hover:bg-dark-700 transition-colors"
-          :disabled="restarting"
-          @click="confirmRestart"
-        >
-          {{ restarting ? '重启中...' : '重启网站' }}
-        </button>
         <router-link
           to="/"
           class="px-4 py-2 rounded-lg bg-dark-800 border border-violet-800/50 text-violet-300 hover:bg-dark-700 transition-colors"
@@ -257,7 +249,6 @@ import {
   adminSetLimit,
   adminGetEnv,
   adminPatchEnv,
-  adminRestart,
 } from '../api'
 
 const graphs = ref([])
@@ -283,7 +274,6 @@ const envList = ref([])
 const envForm = reactive({})
 const envLoadError = ref('')
 const envSaving = ref(false)
-const restarting = ref(false)
 
 function getTodayCount(id) {
   const s = stats.value.find(x => x.id === id)
@@ -459,20 +449,5 @@ async function saveEnv() {
   } finally {
     envSaving.value = false
   }
-}
-
-function confirmRestart() {
-  if (!confirm('确定要重启网站吗？前后端服务将按服务器配置执行重启脚本，期间可能短暂不可用。')) return
-  restarting.value = true
-  adminRestart()
-    .then(() => {
-      alert('重启已触发，请稍候。若长时间未恢复，请检查服务器上的 RESTART_SCRIPT 是否配置正确。')
-    })
-    .catch((e) => {
-      alert(e.response?.data?.detail || '重启请求失败')
-    })
-    .finally(() => {
-      restarting.value = false
-    })
 }
 </script>

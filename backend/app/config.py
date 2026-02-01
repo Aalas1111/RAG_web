@@ -29,9 +29,6 @@ class Settings(BaseSettings):
     # 数据库
     database_url: str = ""
 
-    # 重启网站：可选，填脚本相对项目根的路径（如 scripts/restart.sh），管理界面“重启网站”会执行该脚本
-    restart_script: str = ""
-
     class Config:
         env_file = PROJECT_ROOT / ".env"
         env_file_encoding = "utf-8"
