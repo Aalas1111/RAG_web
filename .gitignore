@@ -1,0 +1,32 @@
+# 环境与密钥（勿提交）
+.env
+.env.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# 运行时数据（可选：若希望版本控制空目录可删除 data/）
+data/
+
+# 示例脚本与文档（不纳入版本控制）
+examples/
+
+# 前端
+frontend/node_modules/
+frontend/dist/
+
+# 日志
+*.log
+logs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
