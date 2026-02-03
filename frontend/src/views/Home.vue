@@ -141,11 +141,15 @@
                   placeholder="在此输入您的问题..."
                   rows="4"
                   class="w-full bg-dark-700 border border-violet-800/50 rounded-xl px-4 py-3 text-violet-200 placeholder-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none"
+                  @keydown="handleKeydown"
                 />
+                <div class="absolute left-7 bottom-1 text-xs text-violet-600/60">
+                  Shift+Enter 换行 | Enter 搜索
+                </div>
                 <button
                   type="button"
                   :disabled="loadingQuery || !queryText.trim() || !selectedGraph"
-                  class="absolute right-3 bottom-3 p-2 rounded-lg text-violet-400 hover:text-violet-200 hover:bg-dark-600/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  class="absolute right-5 bottom-7 p-2 rounded-lg text-violet-400 hover:text-violet-200 hover:bg-dark-600/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   title="提交查询"
                   @click="doQuery"
                 >
@@ -516,5 +520,14 @@ async function submitRegister() {
   } finally {
     loginLoading.value = false
   }
+}
+
+function handleKeydown(event) {
+  // 只有单独按 Enter 键时才执行搜索
+  if (event.key === 'Enter' && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+    event.preventDefault()
+    doQuery()
+  }
+  // 其他情况（Ctrl+Enter、Shift+Enter 等）保持默认行为
 }
 </script>
