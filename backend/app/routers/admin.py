@@ -15,8 +15,12 @@ from app.database import (
     graph_set_daily_limit,
     graph_delete as db_graph_delete,
     query_stat_get_today_all,
+    user_list,
+    user_get,
+    query_history_list_by_user,
+    user_update_password,
 )
-from app.auth import verify_admin, create_access_token, get_current_admin
+from app.auth import verify_admin, create_access_token, get_current_admin, hash_password
 from app.rag_service import insert_async
 
 router = APIRouter()
@@ -34,10 +38,11 @@ class LoginResponse(BaseModel):
 
 
 @router.post("/login", response_model=LoginResponse)
-def login(req: LoginRequest):
+def admin_login(req: LoginRequest):
+    """管理员登录：返回 admin 角色 token。"""
     if not verify_admin(req.username, req.password):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
-    token = create_access_token(req.username)
+    token = create_access_token(req.username, role="admin")
     return LoginResponse(access_token=token)
 
 
@@ -302,3 +307,45 @@ def patch_env(body: EnvUpdateRequest, admin: str = Depends(get_current_admin)):
         return {"message": "无有效更新"}
     _write_env_file(updates)
     return {"message": "已更新"}
+
+
+# --- 账号管理（仅管理员）---
+
+@router.get("/users")
+def admin_list_users(
+    search: Optional[str] = None,
+    admin: str = Depends(get_current_admin),
+):
+    """用户列表，可选按用户名搜索。"""
+    return user_list(search=search)
+
+
+class UpdatePasswordRequest(BaseModel):
+    new_password: str
+
+
+@router.patch("/users/{user_id}/password")
+def admin_update_user_password(
+    user_id: int,
+    body: UpdatePasswordRequest,
+    admin: str = Depends(get_current_admin),
+):
+    u = user_get(user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if not body.new_password or len(body.new_password.strip()) < 1:
+        raise HTTPException(status_code=400, detail="新密码不能为空")
+    user_update_password(user_id, hash_password(body.new_password))
+    return {"message": "已更新"}
+
+
+@router.get("/users/{user_id}/history")
+def admin_get_user_history(
+    user_id: int,
+    admin: str = Depends(get_current_admin),
+):
+    """某用户 7 天内全部查询记录。"""
+    u = user_get(user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return query_history_list_by_user(user_id)

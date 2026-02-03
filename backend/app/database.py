@@ -1,8 +1,8 @@
-"""SQLite 数据库：图谱元数据与每日查询统计"""
+"""SQLite 数据库：图谱元数据、每日查询统计、用户、查询记录"""
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import List, Optional
 
 from app.config import PROJECT_ROOT, DATA_DIR, GRAPHS_DIR
@@ -35,6 +35,24 @@ def init_db():
             PRIMARY KEY (graph_id, stat_date),
             FOREIGN KEY (graph_id) REFERENCES graphs(id)
         );
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS query_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            graph_id INTEGER NOT NULL,
+            query_text TEXT NOT NULL,
+            answer TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (graph_id) REFERENCES graphs(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_query_history_user_graph ON query_history(user_id, graph_id);
+        CREATE INDEX IF NOT EXISTS idx_query_history_created ON query_history(created_at);
         """)
         conn.commit()
     finally:
@@ -153,3 +171,93 @@ def can_query_today(graph_id: int) -> tuple[bool, int, int]:
     limit = g["daily_limit"]
     used = query_stat_get_today(graph_id)
     return used < limit, used, limit
+
+
+# --- 用户 ---
+
+def user_create(username: str, password_hash: str) -> int:
+    with get_db() as conn:
+        cur = conn.execute(
+            "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
+            (username, password_hash, datetime.utcnow().isoformat())
+        )
+        return cur.lastrowid
+
+
+def user_get_by_username(username: str) -> Optional[dict]:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, username, password_hash, created_at FROM users WHERE username = ?",
+            (username,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def user_list(search: Optional[str] = None) -> List[dict]:
+    """管理端：用户列表，可选按用户名搜索。"""
+    with get_db() as conn:
+        if search and search.strip():
+            q = "SELECT id, username, created_at FROM users WHERE username LIKE ? ORDER BY id"
+            rows = conn.execute(q, (f"%{search.strip()}%",)).fetchall()
+        else:
+            rows = conn.execute("SELECT id, username, created_at FROM users ORDER BY id").fetchall()
+    return [dict(r) for r in rows]
+
+
+def user_update_password(user_id: int, password_hash: str):
+    with get_db() as conn:
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id))
+
+
+def user_get(user_id: int) -> Optional[dict]:
+    with get_db() as conn:
+        row = conn.execute("SELECT id, username, created_at FROM users WHERE id = ?", (user_id,)).fetchone()
+    return dict(row) if row else None
+
+
+# --- 查询记录（仅保留 7 天内）---
+
+HISTORY_DAYS = 7
+
+
+def _history_cutoff() -> str:
+    return (datetime.utcnow() - timedelta(days=HISTORY_DAYS)).isoformat()
+
+
+def query_history_add(user_id: int, graph_id: int, query_text: str, answer: str):
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO query_history (user_id, graph_id, query_text, answer, created_at) VALUES (?, ?, ?, ?, ?)",
+            (user_id, graph_id, query_text, answer, datetime.utcnow().isoformat())
+        )
+        # 删除 7 天前的记录
+        conn.execute("DELETE FROM query_history WHERE created_at < ?", (_history_cutoff(),))
+
+
+def query_history_list(user_id: int, graph_id: int) -> List[dict]:
+    """某用户在某图谱下、7 天内的查询记录，按时间倒序。"""
+    cutoff = _history_cutoff()
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, user_id, graph_id, query_text, answer, created_at
+               FROM query_history
+               WHERE user_id = ? AND graph_id = ? AND created_at >= ?
+               ORDER BY created_at DESC""",
+            (user_id, graph_id, cutoff)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def query_history_list_by_user(user_id: int) -> List[dict]:
+    """某用户全部 7 天内记录，按时间倒序（管理端用）。"""
+    cutoff = _history_cutoff()
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT h.id, h.user_id, h.graph_id, h.query_text, h.answer, h.created_at, g.name AS graph_name
+               FROM query_history h
+               LEFT JOIN graphs g ON g.id = h.graph_id
+               WHERE h.user_id = ? AND h.created_at >= ?
+               ORDER BY h.created_at DESC""",
+            (user_id, cutoff)
+        ).fetchall()
+    return [dict(r) for r in rows]

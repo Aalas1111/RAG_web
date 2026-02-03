@@ -33,11 +33,16 @@ export default {
       },
       animation: {
         'fade-in': 'fadeIn 0.25s ease-out',
+        'pulse-dots': 'pulseDots 1.2s ease-in-out infinite',
       },
       keyframes: {
         fadeIn: {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },
+        },
+        pulseDots: {
+          '0%, 80%, 100%': { opacity: '0.4' },
+          '40%': { opacity: '1' },
         },
       },
     },
