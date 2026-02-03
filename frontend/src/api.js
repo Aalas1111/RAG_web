@@ -37,6 +37,11 @@ export const adminCreateGraph = (formData) =>
     headers: { ...authHeaders(), 'Content-Type': 'multipart/form-data' },
     timeout: 300000,
   }).then(r => r.data)
+export const adminCreateGraphFromFolder = (formData) =>
+  api.post('/admin/graphs/from_folder', formData, {
+    headers: { ...authHeaders(), 'Content-Type': 'multipart/form-data' },
+    timeout: 300000,
+  }).then(r => r.data)
 export const adminUpdateGraph = (graphId, files) => {
   const formData = new FormData()
   const fileList = Array.isArray(files) ? files : (files && files.length ? Array.from(files) : [])
@@ -66,3 +71,5 @@ export const adminGetUserHistory = (userId) =>
   api.get(`/admin/users/${userId}/history`, { headers: authHeaders() }).then(r => r.data)
 export const adminUpdateUserPassword = (userId, newPassword) =>
   api.patch(`/admin/users/${userId}/password`, { new_password: newPassword }, { headers: authHeaders() }).then(r => r.data)
+export const adminDeleteUser = (userId) =>
+  api.delete(`/admin/users/${userId}`, { headers: authHeaders() }).then(r => r.data)

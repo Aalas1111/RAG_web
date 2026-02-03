@@ -141,15 +141,23 @@
                   placeholder="在此输入您的问题..."
                   rows="4"
                   class="w-full bg-dark-700 border border-violet-800/50 rounded-xl px-4 py-3 text-violet-200 placeholder-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none"
+                  @keydown.enter.exact.prevent="doQuery"
                 />
-                <button
+                <div class="absolute left-7 bottom-1 text-xs text-violet-600/60">
+                  Shift+Enter 换行 | Enter 搜索
+                </div>
+                  <button
                   type="button"
                   :disabled="loadingQuery || !queryText.trim() || !selectedGraph"
-                  class="absolute right-3 bottom-3 p-2 rounded-lg text-violet-400 hover:text-violet-200 hover:bg-dark-600/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  title="提交查询"
+                  class="absolute right-8 bottom-9 w-9 h-9 flex items-center justify-center rounded-2xl bg-gray-600 text-white hover:bg-gray-500 disabled:bg-gray-500 disabled:opacity-60 disabled:cursor-not-allowed shadow transition-colors z-10"
+                  :title="!selectedGraph ? '请先选择知识图谱' : !queryText.trim() ? '请输入问题' : '提交查询'"
                   @click="doQuery"
                 >
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg v-if="loadingQuery" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </button>
@@ -349,9 +357,20 @@ const viewingRecordAnswerHtml = computed(() => {
   return marked.parse(viewingRecord.value.answer, { async: false })
 })
 
+/** 无时区字符串按 UTC 处理（末尾补 Z），避免解析歧义 */
+function parseHistoryTimestamp(iso) {
+  if (!iso || typeof iso !== 'string') return null
+  const s = iso.trim()
+  if (!s) return null
+  const hasTz = /[Zz]$/.test(s) || /[+-]\d{2}:?\d{2}$/.test(s)
+  const toParse = hasTz ? s : s + 'Z'
+  const d = new Date(toParse)
+  return isNaN(d.getTime()) ? null : d
+}
+
 function formatHistoryDate(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
+  const d = parseHistoryTimestamp(iso)
+  if (!d) return ''
   const today = new Date()
   const isToday = d.toDateString() === today.toDateString()
   if (isToday) return '今天 ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
