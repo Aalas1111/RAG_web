@@ -5,6 +5,7 @@ python-multipart>=0.0.6
 python-dotenv>=1.0.0
 pydantic-settings>=2.0.0
 python-jose[cryptography]>=3.3.0
+bcrypt>=4.0.0
 lightrag-hku>=0.1.0
 numpy>=1.24.0
 openai>=1.0.0

@@ -20,8 +20,28 @@
       </div>
     </header>
 
+    <!-- Tab：知识图谱 / 账号 -->
+    <div class="border-b border-dark-700 px-6 flex gap-1">
+      <button
+        type="button"
+        class="px-4 py-3 text-sm font-medium border-b-2 transition-colors"
+        :class="adminTab === 'graphs' ? 'border-violet-500 text-violet-200' : 'border-transparent text-violet-500 hover:text-violet-300'"
+        @click="adminTab = 'graphs'"
+      >
+        知识图谱
+      </button>
+      <button
+        type="button"
+        class="px-4 py-3 text-sm font-medium border-b-2 transition-colors"
+        :class="adminTab === 'accounts' ? 'border-violet-500 text-violet-200' : 'border-transparent text-violet-500 hover:text-violet-300'"
+        @click="adminTab = 'accounts'; loadUsers()"
+      >
+        账号
+      </button>
+    </div>
+
     <!-- 主体：知识图谱列表 -->
-    <main class="flex-1 px-6 py-8 max-w-4xl mx-auto w-full">
+    <main v-show="adminTab === 'graphs'" class="flex-1 px-6 py-8 max-w-4xl mx-auto w-full">
       <div class="flex items-center justify-between mb-6">
         <h2 class="text-xl font-semibold text-violet-200">知识图谱列表</h2>
         <div class="flex items-center gap-3">
@@ -84,6 +104,50 @@
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- 主体：账号管理 -->
+    <main v-show="adminTab === 'accounts'" class="flex-1 px-6 py-8 max-w-4xl mx-auto w-full">
+      <div class="flex items-center gap-3 mb-6">
+        <h2 class="text-xl font-semibold text-violet-200">账号管理</h2>
+        <input
+          v-model="userSearch"
+          type="text"
+          placeholder="搜索账号..."
+          class="flex-1 max-w-xs bg-dark-700 border border-violet-800/50 rounded-lg px-4 py-2 text-violet-200 placeholder-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-sm"
+          @input="debounceSearch"
+        />
+      </div>
+      <div v-if="usersLoading" class="text-violet-500 py-12 text-center">加载中...</div>
+      <div v-else-if="!users.length" class="text-violet-500 py-12 text-center">暂无用户</div>
+      <div v-else class="space-y-3">
+        <div
+          v-for="u in users"
+          :key="u.id"
+          class="rounded-xl bg-dark-800 border border-violet-800/50 p-4 flex items-center justify-between gap-4"
+        >
+          <div>
+            <span class="font-medium text-violet-200">{{ u.username }}</span>
+            <span class="text-xs text-violet-500 ml-2">ID: {{ u.id }} · 注册于 {{ formatUserDate(u.created_at) }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="px-3 py-1.5 rounded-lg bg-dark-700 text-violet-300 hover:bg-dark-600 text-sm"
+              @click="openUserHistory(u)"
+            >
+              查询记录
+            </button>
+            <button
+              type="button"
+              class="px-3 py-1.5 rounded-lg bg-violet-600/80 text-white hover:bg-violet-500 text-sm"
+              @click="openEditPassword(u)"
+            >
+              修改密码
+            </button>
           </div>
         </div>
       </div>
@@ -202,6 +266,52 @@
       </div>
     </Teleport>
 
+    <!-- 用户查询记录弹窗 -->
+    <Teleport to="body">
+      <div v-if="userHistoryModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" @click.self="userHistoryModal = null">
+        <div class="bg-dark-800 border border-violet-800/50 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+          <div class="px-6 py-4 border-b border-dark-700 flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-violet-200">{{ userHistoryModal.username }} 的查询记录</h2>
+            <button type="button" class="p-2 text-violet-400 hover:text-violet-200 rounded-lg hover:bg-dark-700" @click="userHistoryModal = null">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+          <div class="flex-1 overflow-y-auto p-4 space-y-4">
+            <div v-if="!userHistoryList.length" class="text-violet-500 text-sm py-8 text-center">暂无记录</div>
+            <div v-else v-for="h in userHistoryList" :key="h.id" class="rounded-xl bg-dark-700 border border-dark-600 p-4">
+              <div class="text-xs text-violet-500 mb-2">{{ formatUserDate(h.created_at) }} · {{ h.graph_name || '图谱' }}</div>
+              <div class="text-violet-300 text-sm font-medium mb-1">问题：</div>
+              <p class="text-violet-200 text-sm whitespace-pre-wrap mb-2">{{ h.query_text }}</p>
+              <div class="text-violet-300 text-sm font-medium mb-1">回复：</div>
+              <div class="markdown-body text-sm max-w-none" v-html="markedHistory(h.answer)"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- 修改密码弹窗 -->
+    <Teleport to="body">
+      <div v-if="editPasswordUser" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" @click.self="editPasswordUser = null">
+        <div class="bg-dark-800 border border-violet-800/50 rounded-2xl w-full max-w-sm p-6">
+          <h2 class="text-lg font-semibold text-violet-200 mb-4">修改密码 · {{ editPasswordUser.username }}</h2>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-sm text-violet-400 mb-1">新密码</label>
+              <input v-model="newPassword" type="password" class="w-full bg-dark-700 border border-violet-800/50 rounded-lg px-4 py-2 text-violet-200 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+            </div>
+            <p v-if="passwordError" class="text-red-300 text-sm">{{ passwordError }}</p>
+          </div>
+          <div class="flex justify-end gap-3 mt-6">
+            <button type="button" class="px-4 py-2 rounded-lg bg-dark-700 text-violet-300 hover:bg-dark-600" @click="editPasswordUser = null; passwordError = ''">取消</button>
+            <button type="button" class="px-4 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-500" :disabled="passwordSaving || !newPassword.trim()" @click="saveNewPassword">
+              {{ passwordSaving ? '保存中...' : '保存' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- 配置环境变量弹窗 -->
     <Teleport to="body">
       <div v-if="showEnvModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" @click.self="showEnvModal = false">
@@ -239,6 +349,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { marked } from 'marked'
 import {
   adminGetGraphs,
   adminCreateGraph,
@@ -249,7 +360,12 @@ import {
   adminSetLimit,
   adminGetEnv,
   adminPatchEnv,
+  adminGetUsers,
+  adminGetUserHistory,
+  adminUpdateUserPassword,
 } from '../api'
+
+marked.setOptions({ gfm: true, breaks: true })
 
 const graphs = ref([])
 const graphsLoading = ref(true)
@@ -275,6 +391,18 @@ const envForm = reactive({})
 const envLoadError = ref('')
 const envSaving = ref(false)
 
+const adminTab = ref('graphs')
+const users = ref([])
+const usersLoading = ref(false)
+const userSearch = ref('')
+let searchTimer = null
+const userHistoryModal = ref(null)
+const userHistoryList = ref([])
+const editPasswordUser = ref(null)
+const newPassword = ref('')
+const passwordError = ref('')
+const passwordSaving = ref(false)
+
 function getTodayCount(id) {
   const s = stats.value.find(x => x.id === id)
   return s ? s.today_count : 0
@@ -296,8 +424,10 @@ async function loadGraphs() {
     })
   } catch (e) {
     if (e.response?.status === 401) {
-      localStorage.removeItem('admin_token')
-      window.location.href = '/login?redirect=/admin'
+      localStorage.removeItem('token')
+      localStorage.removeItem('username')
+      localStorage.removeItem('role')
+      window.location.href = '/'
     }
   } finally {
     graphsLoading.value = false
@@ -405,8 +535,58 @@ async function doDelete(id) {
 }
 
 function logout() {
-  localStorage.removeItem('admin_token')
-  window.location.href = '/login'
+  localStorage.removeItem('token')
+  localStorage.removeItem('username')
+  localStorage.removeItem('role')
+  window.location.href = '/'
+}
+
+function formatUserDate(iso) {
+  if (!iso) return ''
+  return new Date(iso).toLocaleString('zh-CN')
+}
+
+function loadUsers() {
+  usersLoading.value = true
+  adminGetUsers(userSearch.value.trim() || undefined)
+    .then((data) => { users.value = data })
+    .catch(() => { users.value = [] })
+    .finally(() => { usersLoading.value = false })
+}
+
+function debounceSearch() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => loadUsers(), 300)
+}
+
+function openUserHistory(u) {
+  userHistoryModal.value = u
+  userHistoryList.value = []
+  adminGetUserHistory(u.id).then((data) => { userHistoryList.value = data })
+}
+
+function markedHistory(text) {
+  return marked.parse(text || '', { async: false })
+}
+
+function openEditPassword(u) {
+  editPasswordUser.value = u
+  newPassword.value = ''
+  passwordError.value = ''
+}
+
+async function saveNewPassword() {
+  if (!editPasswordUser.value || !newPassword.value.trim()) return
+  passwordError.value = ''
+  passwordSaving.value = true
+  try {
+    await adminUpdateUserPassword(editPasswordUser.value.id, newPassword.value.trim())
+    editPasswordUser.value = null
+  } catch (e) {
+    passwordError.value = e.response?.data?.detail || '保存失败'
+  } finally {
+    passwordSaving.value = false
+  }
 }
 
 async function openEnvModal() {
@@ -422,8 +602,10 @@ async function openEnvModal() {
     })
   } catch (e) {
     if (e.response?.status === 401) {
-      localStorage.removeItem('admin_token')
-      window.location.href = '/login?redirect=/admin'
+      localStorage.removeItem('token')
+      localStorage.removeItem('username')
+      localStorage.removeItem('role')
+      window.location.href = '/'
     } else {
       envLoadError.value = e.response?.data?.detail || '加载环境变量失败'
     }
