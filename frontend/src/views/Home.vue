@@ -342,28 +342,20 @@
             </button>
           </div>
           <div class="space-y-6">
-            <div>
-              <button type="button" class="w-full text-left px-4 py-2 rounded-lg border border-red-800/50 text-red-300 hover:bg-red-900/20" @click="showLogoutConfirm = !showLogoutConfirm">
-                注销账户
-              </button>
-              <div v-if="showLogoutConfirm" class="mt-2">
-                <button type="button" class="px-4 py-2 rounded-lg bg-red-700 text-white hover:bg-red-600" @click="logout">确认</button>
-              </div>
-            </div>
             <div class="rounded-xl bg-dark-700 border border-dark-600 p-4 space-y-3">
               <div class="text-violet-300 font-medium">修改密码</div>
               <div>
                 <label class="block text-sm text-violet-400 mb-1">原密码</label>
-                <input v-model="oldPassword" type="password" class="w-full bg-dark-700 border border-violet-800/50 rounded-lg px-4 py-2 text-violet-200 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+                <input v-model="oldPassword" type="password" class="w-full bg-dark-700 border border-violet-600 rounded-lg px-4 py-2 text-violet-200 focus:outline-none focus:ring-1 focus:ring-violet-500" />
                 <p v-if="oldPasswordError" class="text-red-300 text-xs mt-1">{{ oldPasswordError }}</p>
               </div>
               <div>
                 <label class="block text-sm text-violet-400 mb-1">新密码</label>
-                <input v-model="newPassword1" type="password" @focus="onFocusNewFields" class="w-full bg-dark-700 border border-violet-800/50 rounded-lg px-4 py-2 text-violet-200 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+                <input v-model="newPassword1" type="password" @focus="onFocusNewFields" class="w-full bg-dark-700 border border-violet-600 rounded-lg px-4 py-2 text-violet-200 focus:outline-none focus:ring-1 focus:ring-violet-500" />
               </div>
               <div>
                 <label class="block text-sm text-violet-400 mb-1">确认新密码</label>
-                <input v-model="newPassword2" type="password" @focus="onFocusNewFields" class="w-full bg-dark-700 border border-violet-800/50 rounded-lg px-4 py-2 text-violet-200 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+                <input v-model="newPassword2" type="password" @focus="onFocusNewFields" class="w-full bg-dark-700 border border-violet-600 rounded-lg px-4 py-2 text-violet-200 focus:outline-none focus:ring-1 focus:ring-violet-500" />
                 <p v-if="confirmError" class="text-red-300 text-xs mt-1">{{ confirmError }}</p>
               </div>
               <div class="flex items-center gap-2">
@@ -371,6 +363,14 @@
                   {{ passwordSaving ? '保存中...' : '确认' }}
                 </button>
                 <span v-if="passwordSuccess" class="text-green-400 text-sm">{{ passwordSuccess }}</span>
+              </div>
+            </div>
+            <div>
+              <button type="button" class="w-full text-left px-4 py-2 rounded-lg border border-red-800/50 text-red-300 hover:bg-red-900/20" @click="showLogoutConfirm = !showLogoutConfirm">
+                注销账户
+              </button>
+              <div v-if="showLogoutConfirm" class="mt-2">
+                <button type="button" class="px-4 py-2 rounded-lg bg-red-700 text-white hover:bg-red-600" @click="confirmDeleteAccount">确认</button>
               </div>
             </div>
           </div>
@@ -584,6 +584,19 @@ async function submitChangePassword() {
     confirmError.value = e.response?.data?.detail || '修改失败'
   } finally {
     passwordSaving.value = false
+  }
+}
+
+async function confirmDeleteAccount() {
+  try {
+    if (isAdmin.value) {
+      logout()
+      return
+    }
+    await deleteMyAccount()
+    logout()
+  } catch (e) {
+    alert(e.response?.data?.detail || '注销失败')
   }
 }
 
