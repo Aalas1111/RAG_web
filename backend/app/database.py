@@ -271,3 +271,12 @@ def query_history_list_by_user(user_id: int) -> List[dict]:
             (user_id, cutoff)
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def query_history_delete(user_id: int, history_id: int) -> bool:
+    with get_db() as conn:
+        cur = conn.execute(
+            "DELETE FROM query_history WHERE id = ? AND user_id = ?",
+            (history_id, user_id)
+        )
+    return cur.rowcount > 0

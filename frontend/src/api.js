@@ -24,6 +24,12 @@ export const userLogin = (username, password) =>
 export const userMe = () => api.get('/user/me', { headers: authHeaders() }).then(r => r.data)
 export const getQueryHistory = (graphId) =>
   api.get('/query_history', { params: { graph_id: graphId }, headers: authHeaders() }).then(r => r.data)
+export const deleteQueryHistory = (historyId) =>
+  api.delete(`/query_history/${historyId}`, { headers: authHeaders() }).then(r => r.data)
+export const changeMyPassword = (oldPassword, newPassword) =>
+  api.patch('/user/password', { old_password: oldPassword, new_password: newPassword }, { headers: authHeaders() }).then(r => r.data)
+export const deleteMyAccount = () =>
+  api.delete('/user/me', { headers: authHeaders() }).then(r => r.data)
 
 // 管理员登录（返回 token，role=admin）
 export const adminLogin = (username, password) =>
