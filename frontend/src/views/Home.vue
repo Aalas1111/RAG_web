@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-dark-900 text-violet-300 flex flex-col">
     <!-- 顶栏 -->
-    <header class="flex items-center justify-between px-4 py-3 border-b border-dark-700 shrink-0">
+    <header class="flex items-center justify-between px-4 py-3 h-14 border-b border-dark-700 shrink-0 relative z-50">
       <div class="flex items-center gap-2">
         <!-- 左侧栏展开/折叠 -->
         <button
@@ -27,7 +27,7 @@
       </div>
       <div class="flex items-center gap-2">
         <template v-if="currentUsername">
-          <span class="text-violet-300 text-sm mr-1">{{ currentUsername }}</span>
+          <button type="button" class="text-violet-300 text-sm mr-1 hover:text-violet-200" @click="openAccountModal">{{ currentUsername }}</button>
           <router-link
             v-if="isAdmin"
             to="/admin"
@@ -57,11 +57,12 @@
       </div>
     </header>
 
-    <div class="flex flex-1 min-h-0">
+    <div class="flex flex-1 min-h-0 relative">
       <!-- 左侧查询记录栏 -->
       <aside
         v-show="sidebarOpen"
-        class="w-72 shrink-0 border-r border-dark-700 bg-dark-800/80 flex flex-col overflow-hidden"
+        class="flex flex-col overflow-hidden border-r border-dark-700 bg-dark-800/90 transition-transform duration-300 fixed left-0 top-14 bottom-0 w-72 z-40 lg:static lg:top-auto lg:bottom-auto lg:shrink-0 lg:w-72"
+        :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
       >
         <div class="p-3 border-b border-dark-700">
           <button
@@ -86,20 +87,40 @@
             <p class="text-violet-500 text-xs px-2 py-4">暂无查询记录</p>
           </template>
           <template v-else>
-            <button
+            <div
               v-for="h in queryHistory"
               :key="h.id"
-              type="button"
-              class="w-full text-left px-3 py-2.5 rounded-lg mb-1.5 transition-colors"
+              class="w-full px-3 py-2.5 rounded-lg mb-1.5 transition-colors flex items-center gap-2"
               :class="viewingRecordId === h.id ? 'bg-violet-800/40 border border-violet-600/50' : 'hover:bg-dark-700 border border-transparent'"
-              @click="viewRecord(h)"
             >
-              <div class="text-xs text-violet-400">{{ formatHistoryDate(h.created_at) }}</div>
-              <div class="text-violet-200 text-sm mt-0.5 line-clamp-2">{{ h.query_text }}</div>
-            </button>
+              <button
+                type="button"
+                class="flex-1 text-left"
+                @click="viewRecord(h)"
+              >
+                <div class="text-xs text-violet-400">{{ formatHistoryDate(h.created_at) }}</div>
+                <div class="text-violet-200 text-sm mt-0.5 line-clamp-2">{{ h.query_text }}</div>
+              </button>
+              <button
+                type="button"
+                class="p-2 rounded-lg text-violet-400 hover:text-violet-200 hover:bg-dark-700"
+                title="删除"
+                @click.stop="deleteHistory(h)"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6m-7 0a2 2 0 012-2h4a2 2 0 012 2m-9 0h10" />
+                </svg>
+              </button>
+            </div>
           </template>
         </div>
       </aside>
+      <!-- 小屏遮罩，侧边栏覆盖主内容，不挤压对话框 -->
+      <div
+        v-if="sidebarOpen"
+        class="fixed left-0 top-14 right-0 bottom-0 bg-black/40 z-30 lg:hidden"
+        @click="sidebarOpen = false"
+      />
 
       <!-- 主内容 -->
       <main class="flex-1 flex flex-col items-center justify-center px-6 py-8 min-w-0">
@@ -307,11 +328,61 @@
       </div>
     </Teleport>
   </div>
+    <Teleport to="body">
+      <div
+        v-if="showAccountModal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-fade-in"
+        @click.self="closeAccountModal"
+      >
+        <div class="bg-dark-800 border border-violet-800/50 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+          <div class="flex items-center justify-between border-b border-dark-700 pb-3 mb-4">
+            <h2 class="text-lg font-semibold text-violet-200">个人账户</h2>
+            <button type="button" class="p-2 text-violet-400 hover:text-violet-200 rounded-lg hover:bg-dark-700" @click="closeAccountModal">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+          <div class="space-y-6">
+            <div class="rounded-xl bg-dark-700 border border-dark-600 p-4 space-y-3">
+              <div class="text-violet-300 font-medium">修改密码</div>
+              <div>
+                <label class="block text-sm text-violet-400 mb-1">原密码</label>
+                <input v-model="oldPassword" type="password" class="w-full bg-dark-700 border border-violet-600 rounded-lg px-4 py-2 text-violet-200 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+                <p v-if="oldPasswordError" class="text-red-300 text-xs mt-1">{{ oldPasswordError }}</p>
+              </div>
+              <div>
+                <label class="block text-sm text-violet-400 mb-1">新密码</label>
+                <input v-model="newPassword1" type="password" @focus="onFocusNewFields" class="w-full bg-dark-700 border border-violet-600 rounded-lg px-4 py-2 text-violet-200 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+              </div>
+              <div>
+                <label class="block text-sm text-violet-400 mb-1">确认新密码</label>
+                <input v-model="newPassword2" type="password" @focus="onFocusNewFields" class="w-full bg-dark-700 border border-violet-600 rounded-lg px-4 py-2 text-violet-200 focus:outline-none focus:ring-1 focus:ring-violet-500" />
+                <p v-if="confirmError" class="text-red-300 text-xs mt-1">{{ confirmError }}</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button type="button" class="px-4 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50" :disabled="passwordSaving" @click="submitChangePassword">
+                  {{ passwordSaving ? '保存中...' : '确认' }}
+                </button>
+                <span v-if="passwordSuccess" class="text-green-400 text-sm">{{ passwordSuccess }}</span>
+              </div>
+            </div>
+            <div>
+              <button type="button" class="w-full text-left px-4 py-2 rounded-lg border border-red-800/50 text-red-300 hover:bg-red-900/20" @click="showLogoutConfirm = !showLogoutConfirm">
+                注销账户
+              </button>
+              <div v-if="showLogoutConfirm" class="mt-2">
+                <button type="button" class="px-4 py-2 rounded-lg bg-red-700 text-white hover:bg-red-600" @click="confirmDeleteAccount">确认</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 </template>
+
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { getGraphsWithUsage, query, userLogin, register, adminLogin, getQueryHistory, userMe } from '../api'
+import { getGraphsWithUsage, query, userLogin, register, adminLogin, getQueryHistory, userMe, deleteQueryHistory, changeMyPassword, deleteMyAccount, adminPatchEnv } from '../api'
 import { marked } from 'marked'
 
 marked.setOptions({ gfm: true, breaks: true })
@@ -346,6 +417,16 @@ const loginLoading = ref(false)
 
 const currentUsername = ref('')
 const isAdmin = ref(false)
+const showAccountModal = ref(false)
+const showLogoutConfirm = ref(false)
+const oldPassword = ref('')
+const newPassword1 = ref('')
+const newPassword2 = ref('')
+const oldPasswordValid = ref(false)
+const oldPasswordError = ref('')
+const confirmError = ref('')
+const passwordSuccess = ref('')
+const passwordSaving = ref(false)
 
 const answerHtml = computed(() => {
   if (answer.value == null) return ''
@@ -400,6 +481,27 @@ async function loadHistory() {
   }
 }
 
+function resetAccountModal() {
+  showLogoutConfirm.value = false
+  oldPassword.value = ''
+  newPassword1.value = ''
+  newPassword2.value = ''
+  oldPasswordValid.value = false
+  oldPasswordError.value = ''
+  confirmError.value = ''
+  passwordSuccess.value = ''
+  passwordSaving.value = false
+}
+
+function openAccountModal() {
+  resetAccountModal()
+  showAccountModal.value = true
+}
+
+function closeAccountModal() {
+  showAccountModal.value = false
+  resetAccountModal()
+}
 watch(selectedGraph, () => {
   viewingRecordId.value = null
   viewingRecord.value = null
@@ -418,6 +520,84 @@ function startNewQuery() {
 function viewRecord(h) {
   viewingRecordId.value = h.id
   viewingRecord.value = h
+}
+
+async function deleteHistory(h) {
+  try {
+    await deleteQueryHistory(h.id)
+    if (viewingRecordId.value === h.id) {
+      viewingRecordId.value = null
+      viewingRecord.value = null
+    }
+    queryHistory.value = queryHistory.value.filter(x => x.id !== h.id)
+  } catch (e) {
+    alert(e.response?.data?.detail || '删除失败')
+  }
+}
+
+async function validateOldPassword() {
+  oldPasswordError.value = ''
+  oldPasswordValid.value = false
+  try {
+    if (isAdmin.value) {
+      await adminLogin(currentUsername.value, oldPassword.value)
+    } else {
+      await userLogin(currentUsername.value, oldPassword.value)
+    }
+    oldPasswordValid.value = true
+  } catch (e) {
+    oldPasswordError.value = '请输入正确的密码'
+  }
+}
+
+function onFocusNewFields() {
+  if (!oldPasswordValid.value) {
+    oldPasswordError.value = '请输入正确的密码'
+    validateOldPassword()
+  }
+}
+
+async function submitChangePassword() {
+  passwordSuccess.value = ''
+  confirmError.value = ''
+  if (!oldPasswordValid.value) {
+    oldPasswordError.value = '请输入正确的密码'
+    return
+  }
+  if (!newPassword1.value || !newPassword2.value || newPassword1.value !== newPassword2.value) {
+    confirmError.value = '与原密码不符'
+    return
+  }
+  passwordSaving.value = true
+  try {
+    if (isAdmin.value) {
+      await adminPatchEnv({ ADMIN_PASSWORD: newPassword1.value })
+    } else {
+      await changeMyPassword(oldPassword.value, newPassword1.value)
+    }
+    passwordSuccess.value = '创建成功'
+    oldPassword.value = ''
+    newPassword1.value = ''
+    newPassword2.value = ''
+    oldPasswordValid.value = false
+  } catch (e) {
+    confirmError.value = e.response?.data?.detail || '修改失败'
+  } finally {
+    passwordSaving.value = false
+  }
+}
+
+async function confirmDeleteAccount() {
+  try {
+    if (isAdmin.value) {
+      logout()
+      return
+    }
+    await deleteMyAccount()
+    logout()
+  } catch (e) {
+    alert(e.response?.data?.detail || '注销失败')
+  }
 }
 
 onMounted(async () => {
