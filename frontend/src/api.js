@@ -24,6 +24,12 @@ export const userLogin = (username, password) =>
 export const userMe = () => api.get('/user/me', { headers: authHeaders() }).then(r => r.data)
 export const getQueryHistory = (graphId) =>
   api.get('/query_history', { params: { graph_id: graphId }, headers: authHeaders() }).then(r => r.data)
+export const deleteQueryHistory = (historyId) =>
+  api.delete(`/query_history/${historyId}`, { headers: authHeaders() }).then(r => r.data)
+export const changeMyPassword = (oldPassword, newPassword) =>
+  api.patch('/user/password', { old_password: oldPassword, new_password: newPassword }, { headers: authHeaders() }).then(r => r.data)
+export const deleteMyAccount = () =>
+  api.delete('/user/me', { headers: authHeaders() }).then(r => r.data)
 
 // 管理员登录（返回 token，role=admin）
 export const adminLogin = (username, password) =>
@@ -34,6 +40,11 @@ export const adminGetGraphs = () =>
   api.get('/admin/graphs', { headers: authHeaders() }).then(r => r.data)
 export const adminCreateGraph = (formData) =>
   api.post('/admin/graphs', formData, {
+    headers: { ...authHeaders(), 'Content-Type': 'multipart/form-data' },
+    timeout: 300000,
+  }).then(r => r.data)
+export const adminCreateGraphFromFolder = (formData) =>
+  api.post('/admin/graphs/from_folder', formData, {
     headers: { ...authHeaders(), 'Content-Type': 'multipart/form-data' },
     timeout: 300000,
   }).then(r => r.data)
@@ -66,3 +77,5 @@ export const adminGetUserHistory = (userId) =>
   api.get(`/admin/users/${userId}/history`, { headers: authHeaders() }).then(r => r.data)
 export const adminUpdateUserPassword = (userId, newPassword) =>
   api.patch(`/admin/users/${userId}/password`, { new_password: newPassword }, { headers: authHeaders() }).then(r => r.data)
+export const adminDeleteUser = (userId) =>
+  api.delete(`/admin/users/${userId}`, { headers: authHeaders() }).then(r => r.data)

@@ -10,8 +10,11 @@ from app.database import (
     query_stat_get_today,
     user_create,
     user_get_by_username,
+    user_update_password,
+    user_delete,
     query_history_add,
     query_history_list,
+    query_history_delete,
 )
 from app.rag_service import query_async, VALID_MODES
 from app.auth import hash_password, verify_password, create_access_token, get_current_user_optional
@@ -55,6 +58,11 @@ class HistoryItem(BaseModel):
     query_text: str
     answer: str
     created_at: str
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
 
 
 @router.get("/graphs")
@@ -130,6 +138,48 @@ def get_query_history(
     items = query_history_list(u["id"], graph_id)
     return items
 
+@router.delete("/query_history/{history_id}")
+def delete_query_history(
+    history_id: int,
+    username: str | None = Depends(get_current_user_optional),
+):
+    if not username:
+        raise HTTPException(status_code=401, detail="未登录")
+    u = user_get_by_username(username)
+    if not u:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if not query_history_delete(u["id"], history_id):
+        raise HTTPException(status_code=404, detail="记录不存在")
+    return {"message": "已删除"}
+
+
+@router.patch("/user/password")
+def change_password(
+    body: ChangePasswordRequest,
+    username: str | None = Depends(get_current_user_optional),
+):
+    if not username:
+        raise HTTPException(status_code=401, detail="未登录")
+    u = user_get_by_username(username)
+    if not u:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if not verify_password(body.old_password or "", u["password_hash"]):
+        raise HTTPException(status_code=401, detail="原密码错误")
+    if not body.new_password or len(body.new_password.strip()) < 1:
+        raise HTTPException(status_code=400, detail="新密码不能为空")
+    user_update_password(u["id"], hash_password(body.new_password))
+    return {"message": "已更新"}
+
+
+@router.delete("/user/me")
+def delete_me(username: str | None = Depends(get_current_user_optional)):
+    if not username:
+        raise HTTPException(status_code=401, detail="未登录")
+    u = user_get_by_username(username)
+    if not u:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    user_delete(u["id"])
+    return {"message": "已删除"}
 
 @router.post("/query", response_model=QueryResponse)
 async def query(

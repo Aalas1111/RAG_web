@@ -17,6 +17,7 @@ from app.database import (
     query_stat_get_today_all,
     user_list,
     user_get,
+    user_delete as db_user_delete,
     query_history_list_by_user,
     user_update_password,
 )
@@ -115,6 +116,82 @@ async def create_graph(
     return {"id": graph_id, "name": name, "description": description, "working_dir": working_dir}
 
 
+def _safe_relative_path(parts: List[str], root: Path, base: Path) -> Optional[Path]:
+    """将相对路径部分组合成 root 下的安全路径；若有 .. 或逃逸则返回 None。"""
+    if not parts:
+        return None
+    p = root
+    for seg in parts:
+        if seg in ("", ".", ".."):
+            return None
+        p = p / seg
+    try:
+        p = p.resolve()
+        if not str(p).startswith(str(base.resolve())):
+            return None
+    except Exception:
+        return None
+    return p
+
+
+@router.post("/graphs/from_folder")
+async def create_graph_from_folder(
+    name: str = Form(...),
+    description: str = Form(""),
+    daily_limit: int = Form(100),
+    files: List[UploadFile] = File(..., description="从文件夹选择的多个文件"),
+    admin: str = Depends(get_current_admin),
+):
+    """上传一个知识图谱文件夹（任意名称），将其中所有文件导入新的 graph_<id> 目录；名称、简介等由表单填写。"""
+    ensure_dirs()
+    if not files:
+        raise HTTPException(status_code=400, detail="请选择要导入的文件夹（至少包含一个文件）")
+    working_dir = ""
+    graph_id = None
+    try:
+        graph_id = graph_create(name=name.strip(), description=description.strip(), working_dir=None, daily_limit=daily_limit)
+        working_dir = str(GRAPHS_DIR / f"graph_{graph_id}")
+        root_path = Path(working_dir)
+        root_path.mkdir(parents=True, exist_ok=True)
+        from app.database import get_db
+        with get_db() as conn:
+            conn.execute("UPDATE graphs SET working_dir = ? WHERE id = ?", (working_dir, graph_id))
+        # 解析所有文件的相对路径，去掉首层文件夹名（用户选择的文件夹名）以保留内部结构
+        seen_first_prefix = None
+        to_write: List[tuple] = []
+        for f in files:
+            fn = (f.filename or "").strip().replace("\\", "/").strip("/")
+            if not fn:
+                continue
+            parts = fn.split("/")
+            if seen_first_prefix is None and len(parts) >= 1:
+                seen_first_prefix = parts[0]
+            if len(parts) > 1 and parts[0] == seen_first_prefix:
+                rel_parts = parts[1:]
+            else:
+                rel_parts = parts
+            if not rel_parts:
+                rel_parts = [parts[0]] if parts else []
+            content = await f.read()
+            to_write.append((rel_parts, content))
+        for rel_parts, content in to_write:
+            target = _safe_relative_path(rel_parts, root_path, root_path)
+            if target is None:
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
+    except HTTPException:
+        raise
+    except Exception as e:
+        if graph_id:
+            db_graph_delete(graph_id)
+            p = Path(working_dir)
+            if p.exists():
+                shutil.rmtree(p, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"导入文件夹失败: {str(e)}")
+    return {"id": graph_id, "name": name, "description": description, "working_dir": working_dir}
+
+
 @router.post("/graphs/{graph_id}/update")
 async def incremental_update(
     graph_id: int,
@@ -147,10 +224,15 @@ async def incremental_update(
 @router.delete("/graphs/{graph_id}")
 def delete_graph(graph_id: int, admin: str = Depends(get_current_admin)):
     working_dir = db_graph_delete(graph_id)
+    # 删除数据库记录对应的目录（若存在）
     if working_dir:
         p = Path(working_dir)
         if p.exists():
             shutil.rmtree(p, ignore_errors=True)
+    # 无论 working_dir 是否为空，都尝试删除 data/graphs/graph_<id>，避免遗留文件
+    default_graph_dir = GRAPHS_DIR / f"graph_{graph_id}"
+    if default_graph_dir.exists():
+        shutil.rmtree(default_graph_dir, ignore_errors=True)
     return {"message": "已删除"}
 
 
@@ -349,3 +431,14 @@ def admin_get_user_history(
     if not u:
         raise HTTPException(status_code=404, detail="用户不存在")
     return query_history_list_by_user(user_id)
+
+
+@router.delete("/users/{user_id}")
+def admin_delete_user(
+    user_id: int,
+    admin: str = Depends(get_current_admin),
+):
+    """删除账号并级联删除该账号的所有查询记录。"""
+    if not db_user_delete(user_id):
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return {"message": "已删除"}

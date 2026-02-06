@@ -56,7 +56,7 @@
           <button
             type="button"
             class="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-500 transition-colors"
-            @click="showCreateModal = true"
+            @click="openCreateModal"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
             创建知识图谱
@@ -148,6 +148,13 @@
             >
               修改密码
             </button>
+            <button
+              type="button"
+              class="px-3 py-1.5 rounded-lg bg-red-900/40 border border-red-800/50 text-red-300 hover:bg-red-900/60 text-sm"
+              @click="confirmDeleteUser(u)"
+            >
+              删除账号
+            </button>
           </div>
         </div>
       </div>
@@ -176,9 +183,24 @@
               <label class="block text-sm text-violet-400 mb-1">每日查询限额</label>
               <input v-model.number="createDailyLimit" type="number" min="0" placeholder="100" class="w-full bg-dark-700 border border-violet-800/50 rounded-lg px-4 py-2 text-violet-200 placeholder-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500" />
             </div>
+            <!-- 上传区域：.txt 模式 / 文件夹模式 切换 -->
             <div>
-              <label class="block text-sm text-violet-400 mb-1">上传 .txt 文件（可多选或拖入）</label>
+              <div class="flex items-center justify-between gap-2 mb-1">
+                <label class="text-sm text-violet-400">
+                  <template v-if="createMode === 'txt'">上传 .txt 文件</template>
+                  <template v-else>上传知识图谱文件夹</template>
+                </label>
+                <button
+                  type="button"
+                  class="text-sm text-violet-400 hover:text-violet-200 underline cursor-pointer"
+                  @click="switchCreateMode"
+                >
+                  {{ createMode === 'txt' ? '导入已有的知识图谱文件' : '从.txt文件构建知识图谱' }}
+                </button>
+              </div>
+              <!-- .txt 模式：多选/拖入 .txt -->
               <div
+                v-if="createMode === 'txt'"
                 class="border-2 border-dashed border-violet-800/50 rounded-xl p-6 text-center transition-colors"
                 :class="dropActive ? 'border-violet-600 bg-violet-800/20' : 'border-violet-800/50'"
                 @dragover.prevent="dropActive = true"
@@ -189,12 +211,38 @@
                 <p class="text-violet-400 text-sm mb-2">将文件拖到此处，或点击选择</p>
                 <button type="button" class="px-4 py-2 rounded-lg bg-dark-700 text-violet-300 hover:bg-dark-600" @click="createFileRef?.click()">选择文件</button>
                 <p v-if="createFiles.length" class="text-violet-300 text-sm mt-2">已选 {{ createFiles.length }} 个文件</p>
+                <button
+                  v-if="createFiles.length"
+                  type="button"
+                  class="mt-2 px-3 py-1.5 rounded-lg bg-dark-700 text-violet-400 hover:text-violet-200 hover:bg-dark-600 text-sm"
+                  @click="clearCreateFiles"
+                >
+                  清空已选文件
+                </button>
+              </div>
+              <!-- 文件夹模式：选择文件夹 -->
+              <div
+                v-else
+                class="border-2 border-dashed border-violet-800/50 rounded-xl p-6 text-center"
+              >
+                <input ref="createFolderRef" type="file" class="hidden" webkitdirectory directory @change="onCreateFolder" />
+                <p class="text-violet-400 text-sm mb-2">选择本地的知识图谱文件夹，将导入该文件夹内全部文件</p>
+                <button type="button" class="px-4 py-2 rounded-lg bg-dark-700 text-violet-300 hover:bg-dark-600" @click="createFolderRef?.click()">选择文件夹</button>
+                <p v-if="createFolderFiles.length" class="text-violet-300 text-sm mt-2">已选 {{ createFolderFiles.length }} 个文件</p>
+                <button
+                  v-if="createFolderFiles.length"
+                  type="button"
+                  class="mt-2 px-3 py-1.5 rounded-lg bg-dark-700 text-violet-400 hover:text-violet-200 hover:bg-dark-600 text-sm"
+                  @click="clearCreateFolderFiles"
+                >
+                  清空已选
+                </button>
               </div>
             </div>
           </div>
           <div class="px-6 py-4 border-t border-dark-700 flex justify-end gap-3">
             <button type="button" class="px-4 py-2 rounded-lg bg-dark-700 text-violet-300 hover:bg-dark-600" @click="showCreateModal = false">取消</button>
-            <button type="button" class="px-4 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50" :disabled="creating || !createName.trim() || !createFiles.length" @click="createGraph">
+            <button type="button" class="px-4 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50" :disabled="creating || !createName.trim() || !createFileCount" @click="submitCreateGraph">
               {{ creating ? '创建中...' : '创建' }}
             </button>
           </div>
@@ -266,25 +314,72 @@
       </div>
     </Teleport>
 
-    <!-- 用户查询记录弹窗 -->
+    <!-- 用户查询记录弹窗（左侧边栏选记录 + 右侧详情，类似 Home） -->
     <Teleport to="body">
       <div v-if="userHistoryModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" @click.self="userHistoryModal = null">
-        <div class="bg-dark-800 border border-violet-800/50 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
-          <div class="px-6 py-4 border-b border-dark-700 flex justify-between items-center">
+        <div class="bg-dark-800 border border-violet-800/50 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
+          <div class="px-6 py-4 border-b border-dark-700 flex justify-between items-center shrink-0">
             <h2 class="text-lg font-semibold text-violet-200">{{ userHistoryModal.username }} 的查询记录</h2>
             <button type="button" class="p-2 text-violet-400 hover:text-violet-200 rounded-lg hover:bg-dark-700" @click="userHistoryModal = null">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-          <div class="flex-1 overflow-y-auto p-4 space-y-4">
-            <div v-if="!userHistoryList.length" class="text-violet-500 text-sm py-8 text-center">暂无记录</div>
-            <div v-else v-for="h in userHistoryList" :key="h.id" class="rounded-xl bg-dark-700 border border-dark-600 p-4">
-              <div class="text-xs text-violet-500 mb-2">{{ formatUserDate(h.created_at) }} · {{ h.graph_name || '图谱' }}</div>
-              <div class="text-violet-300 text-sm font-medium mb-1">问题：</div>
-              <p class="text-violet-200 text-sm whitespace-pre-wrap mb-2">{{ h.query_text }}</p>
-              <div class="text-violet-300 text-sm font-medium mb-1">回复：</div>
-              <div class="markdown-body text-sm max-w-none" v-html="markedHistory(h.answer)"></div>
+          <div class="flex flex-1 min-h-0">
+            <aside class="w-72 shrink-0 border-r border-dark-700 bg-dark-700/50 flex flex-col overflow-hidden">
+              <div class="flex-1 overflow-y-auto p-2">
+                <template v-if="userHistoryLoading">
+                  <p class="text-violet-500 text-xs px-2 py-4">加载中...</p>
+                </template>
+                <template v-else-if="!userHistoryList.length">
+                  <p class="text-violet-500 text-xs px-2 py-4">暂无记录</p>
+                </template>
+                <template v-else>
+                  <button
+                    v-for="h in userHistoryList"
+                    :key="h.id"
+                    type="button"
+                    class="w-full text-left px-3 py-2.5 rounded-lg mb-1.5 transition-colors"
+                    :class="selectedHistoryId === h.id ? 'bg-violet-800/40 border border-violet-600/50' : 'hover:bg-dark-600 border border-transparent'"
+                    @click="selectUserHistory(h)"
+                  >
+                    <div class="text-xs text-violet-400">{{ formatUserDate(h.created_at) }}</div>
+                    <div class="text-violet-200 text-sm mt-0.5 line-clamp-2">{{ h.query_text }}</div>
+                  </button>
+                </template>
+              </div>
+            </aside>
+            <div class="flex-1 overflow-y-auto p-4 min-w-0">
+              <template v-if="!selectedUserHistory">
+                <p class="text-violet-500 text-sm py-8 text-center">在左侧选择一条查询记录查看详情</p>
+              </template>
+              <template v-else>
+                <div class="rounded-xl bg-dark-700 border border-dark-600 p-4 space-y-4">
+                  <div class="text-xs text-violet-500">{{ formatUserDate(selectedUserHistory.created_at) }} · {{ selectedUserHistory.graph_name || '图谱' }}</div>
+                  <div>
+                    <div class="text-violet-300 text-sm font-medium mb-1">问题：</div>
+                    <p class="text-violet-200 text-sm whitespace-pre-wrap">{{ selectedUserHistory.query_text }}</p>
+                  </div>
+                  <div>
+                    <div class="text-violet-300 text-sm font-medium mb-1">回复：</div>
+                    <div class="markdown-body text-sm max-w-none" v-html="markedHistory(selectedUserHistory.answer)"></div>
+                  </div>
+                </div>
+              </template>
             </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- 删除账号确认弹窗 -->
+    <Teleport to="body">
+      <div v-if="toDeleteUser" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" @click.self="toDeleteUser = null">
+        <div class="bg-dark-800 border border-red-800/50 rounded-2xl w-full max-w-md p-6">
+          <h2 class="text-lg font-semibold text-violet-200 mb-2">确认删除账号</h2>
+          <p class="text-violet-400 text-sm mb-6">确定要删除账号「{{ toDeleteUser.username }}」吗？此操作不可恢复，该账号下的所有查询记录将一并删除。</p>
+          <div class="flex justify-end gap-3">
+            <button type="button" class="px-4 py-2 rounded-lg bg-dark-700 text-violet-300 hover:bg-dark-600" @click="toDeleteUser = null">取消</button>
+            <button type="button" class="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-500" @click="doDeleteUser(toDeleteUser.id)">确认删除</button>
           </div>
         </div>
       </div>
@@ -348,11 +443,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { marked } from 'marked'
 import {
   adminGetGraphs,
   adminCreateGraph,
+  adminCreateGraphFromFolder,
   adminUpdateGraph,
   adminDeleteGraph,
   adminPatchGraph,
@@ -363,6 +459,7 @@ import {
   adminGetUsers,
   adminGetUserHistory,
   adminUpdateUserPassword,
+  adminDeleteUser,
 } from '../api'
 
 marked.setOptions({ gfm: true, breaks: true })
@@ -377,8 +474,11 @@ const progressError = ref('')
 const createName = ref('')
 const createDesc = ref('')
 const createDailyLimit = ref(100)
+const createMode = ref('txt')
 const createFileRef = ref(null)
 const createFiles = ref([])
+const createFolderRef = ref(null)
+const createFolderFiles = ref([])
 const creating = ref(false)
 const dropActive = ref(false)
 const editName = reactive({})
@@ -398,6 +498,10 @@ const userSearch = ref('')
 let searchTimer = null
 const userHistoryModal = ref(null)
 const userHistoryList = ref([])
+const userHistoryLoading = ref(false)
+const selectedHistoryId = ref(null)
+const selectedUserHistory = ref(null)
+const toDeleteUser = ref(null)
 const editPasswordUser = ref(null)
 const newPassword = ref('')
 const passwordError = ref('')
@@ -455,8 +559,60 @@ function onCreateDrop(e) {
   if (files.length) createFiles.value = [...createFiles.value, ...files]
 }
 
-async function createGraph() {
-  if (!createName.value.trim() || !createFiles.value.length) return
+function clearCreateFiles() {
+  createFiles.value = []
+  createFileRef.value && (createFileRef.value.value = '')
+}
+
+function clearCreateFolderFiles() {
+  createFolderFiles.value = []
+  createFolderRef.value && (createFolderRef.value.value = '')
+}
+
+function switchCreateMode() {
+  createMode.value = createMode.value === 'txt' ? 'folder' : 'txt'
+  clearCreateFiles()
+  clearCreateFolderFiles()
+}
+
+function openCreateModal() {
+  createMode.value = 'txt'
+  createFiles.value = []
+  createFolderFiles.value = []
+  createFileRef.value && (createFileRef.value.value = '')
+  createFolderRef.value && (createFolderRef.value.value = '')
+  showCreateModal.value = true
+}
+
+const createFileCount = computed(() =>
+  createMode.value === 'txt' ? createFiles.value.length : createFolderFiles.value.length
+)
+
+function onCreateFolder(e) {
+  const list = e.target.files
+  createFolderFiles.value = list ? Array.from(list) : []
+}
+
+function confirmDeleteUser(u) {
+  toDeleteUser.value = u
+}
+
+async function doDeleteUser(userId) {
+  try {
+    await adminDeleteUser(userId)
+    toDeleteUser.value = null
+    if (userHistoryModal.value?.id === userId) userHistoryModal.value = null
+    await loadUsers()
+  } catch (e) {
+    alert(e.response?.data?.detail || '删除失败')
+  }
+}
+
+async function submitCreateGraph() {
+  const isTxt = createMode.value === 'txt'
+  if (isTxt && !createFiles.value.length) return
+  if (!isTxt && !createFolderFiles.value.length) return
+  if (!createName.value.trim()) return
   showCreateModal.value = false
   progressModal.value = 'loading'
   creating.value = true
@@ -466,13 +622,22 @@ async function createGraph() {
     formData.append('name', createName.value.trim())
     formData.append('description', createDesc.value.trim())
     formData.append('daily_limit', createDailyLimit.value >= 0 ? createDailyLimit.value : 100)
-    createFiles.value.forEach(file => formData.append('files', file))
-    await adminCreateGraph(formData)
+    if (isTxt) {
+      createFiles.value.forEach(file => formData.append('files', file))
+      await adminCreateGraph(formData)
+    } else {
+      createFolderFiles.value.forEach(file =>
+        formData.append('files', file, file.webkitRelativePath || file.name)
+      )
+      await adminCreateGraphFromFolder(formData)
+    }
     createName.value = ''
     createDesc.value = ''
     createDailyLimit.value = 100
     createFiles.value = []
+    createFolderFiles.value = []
     createFileRef.value && (createFileRef.value.value = '')
+    createFolderRef.value && (createFolderRef.value.value = '')
     await loadGraphs()
     await loadStats()
     progressModal.value = 'success'
@@ -541,9 +706,20 @@ function logout() {
   window.location.href = '/'
 }
 
+/** 无时区时间串按 UTC 处理（末尾补 Z），避免解析歧义 */
+function parseTimestamp(iso) {
+  if (!iso || typeof iso !== 'string') return null
+  const s = iso.trim()
+  if (!s) return null
+  const hasTz = /[Zz]$/.test(s) || /[+-]\d{2}:?\d{2}$/.test(s)
+  const toParse = hasTz ? s : s + 'Z'
+  const d = new Date(toParse)
+  return isNaN(d.getTime()) ? null : d
+}
+
 function formatUserDate(iso) {
-  if (!iso) return ''
-  return new Date(iso).toLocaleString('zh-CN')
+  const d = parseTimestamp(iso)
+  return d ? d.toLocaleString('zh-CN') : ''
 }
 
 function loadUsers() {
@@ -562,7 +738,17 @@ function debounceSearch() {
 function openUserHistory(u) {
   userHistoryModal.value = u
   userHistoryList.value = []
-  adminGetUserHistory(u.id).then((data) => { userHistoryList.value = data })
+  selectedHistoryId.value = null
+  selectedUserHistory.value = null
+  userHistoryLoading.value = true
+  adminGetUserHistory(u.id)
+    .then((data) => { userHistoryList.value = data })
+    .finally(() => { userHistoryLoading.value = false })
+}
+
+function selectUserHistory(h) {
+  selectedHistoryId.value = h.id
+  selectedUserHistory.value = h
 }
 
 function markedHistory(text) {

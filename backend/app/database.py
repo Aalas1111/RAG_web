@@ -2,7 +2,7 @@
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 
 from app.config import PROJECT_ROOT, DATA_DIR, GRAPHS_DIR
@@ -76,11 +76,10 @@ def get_db():
 # --- 图谱 CRUD ---
 
 def graph_create(name: str, description: str, working_dir: Optional[str] = None, daily_limit: int = 100) -> int:
-    from datetime import datetime
     with get_db() as conn:
         cur = conn.execute(
             "INSERT INTO graphs (name, description, working_dir, daily_limit, created_at) VALUES (?, ?, ?, ?, ?)",
-            (name, description, working_dir, daily_limit, datetime.utcnow().isoformat())
+            (name, description, working_dir, daily_limit, datetime.now(timezone.utc).isoformat())
         )
         return cur.lastrowid
 
@@ -179,7 +178,7 @@ def user_create(username: str, password_hash: str) -> int:
     with get_db() as conn:
         cur = conn.execute(
             "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
-            (username, password_hash, datetime.utcnow().isoformat())
+            (username, password_hash, datetime.now(timezone.utc).isoformat())
         )
         return cur.lastrowid
 
@@ -215,20 +214,31 @@ def user_get(user_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def user_delete(user_id: int) -> bool:
+    """删除用户并级联删除其查询记录。存在则返回 True，不存在返回 False。"""
+    u = user_get(user_id)
+    if not u:
+        return False
+    with get_db() as conn:
+        conn.execute("DELETE FROM query_history WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    return True
+
+
 # --- 查询记录（仅保留 7 天内）---
 
 HISTORY_DAYS = 7
 
 
 def _history_cutoff() -> str:
-    return (datetime.utcnow() - timedelta(days=HISTORY_DAYS)).isoformat()
+    return (datetime.now(timezone.utc) - timedelta(days=HISTORY_DAYS)).isoformat()
 
 
 def query_history_add(user_id: int, graph_id: int, query_text: str, answer: str):
     with get_db() as conn:
         conn.execute(
             "INSERT INTO query_history (user_id, graph_id, query_text, answer, created_at) VALUES (?, ?, ?, ?, ?)",
-            (user_id, graph_id, query_text, answer, datetime.utcnow().isoformat())
+            (user_id, graph_id, query_text, answer, datetime.now(timezone.utc).isoformat())
         )
         # 删除 7 天前的记录
         conn.execute("DELETE FROM query_history WHERE created_at < ?", (_history_cutoff(),))
@@ -261,3 +271,12 @@ def query_history_list_by_user(user_id: int) -> List[dict]:
             (user_id, cutoff)
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def query_history_delete(user_id: int, history_id: int) -> bool:
+    with get_db() as conn:
+        cur = conn.execute(
+            "DELETE FROM query_history WHERE id = ? AND user_id = ?",
+            (history_id, user_id)
+        )
+    return cur.rowcount > 0
